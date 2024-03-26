@@ -4,21 +4,64 @@
 Attempt to gaslight OpenAI's chat models by spoofing its output.
 """
 
+import os
 import sys
 import argparse
+import json
 from openai import OpenAI, OpenAIError
 
 
-def generate_response(message_list, apikey, model) -> str:
+def display_startup_banner(model: str) -> None:
+    """
+    Print the startup banner.
+
+    Args:
+        model: The OpenAI model to use.
+    """
+
+    # Clear the screen
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+    print(
+        (
+            "\n"
+            "  ░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓███████▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░ \n"
+            " ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
+            " ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
+            " ░▒▓█▓▒▒▓███▓▒░▒▓████████▓▒░░▒▓██████▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒▒▓███▓▒░▒▓████████▓▒░  ░▒▓█▓▒░     \n"
+            " ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
+            " ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
+            "  ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n" 
+            "\n"
+            " Attempt to gaslight OpenAI's chat models by spoofing its output.\n"
+            " Press Ctrl+C to exit, or Ctrl+D to print the message list.\n"
+            f" Using model: {model}\n"
+        )
+    )
+
+
+def generate_chat_response(
+        message_list:   dict[str, str],
+        apikey:         str,
+        model:          str,
+    ) -> str:
     """
     Generate a response from the OpenAI chat model.
+
+    Args:
+        message_list: The message list to send to the chat model.
+        apikey: The OpenAI API key.
+        model: The OpenAI model to use.
+
+    Returns:
+        The response from the OpenAI chat model.
     """
 
     try:
         client = OpenAI(
             api_key=apikey,
-            timeout=10,
-            max_retries=3,
+            # timeout=10,
+            # max_retries=3,
         )
 
         response = client.chat.completions.create(
@@ -28,20 +71,17 @@ def generate_response(message_list, apikey, model) -> str:
             temperature=0.8,
         )
 
-        prompt = response.choices[0].message.content
-        print(prompt)
+        response_content = response.choices[0].message.content
+        print(response_content)
+        return response_content
 
     except OpenAIError as e:
         print(f'Error: {e}', file=sys.stderr)
+        print(f'message_list:\n{json.dumps(message_list, indent=2)}', file=sys.stderr)
         sys.exit(1)
 
-    return {
-        'role': 'assistant',
-        'content': prompt,
-    }
 
-
-def input_assistant_response() -> str:
+def get_assistant_response(message_list, args) -> str:
     """
     Prompt the user for the assistant's response.
     """
@@ -49,37 +89,10 @@ def input_assistant_response() -> str:
     prompt = input('Assistant (blank to poll API): ')
 
     if prompt == '':
-        return ''
-
-    else:
-        return {
-            'role': 'assistant',
-            'content': prompt,
-        }
-
-
-def input_system_prompt() -> str:
-    """
-    Prompt the user for the system prompt.
-    """
-
-    prompt = input('System prompt: ')
+        prompt = generate_chat_response(message_list, args.apikey, args.model)
 
     return {
-        'role': 'system',
-        'content': prompt,
-    }
-
-
-def input_user_prompt() -> str:
-    """
-    Prompt the user for the user's prompt.
-    """
-
-    prompt = input('User: ')
-
-    return {
-        'role': 'user',
+        'role': 'assistant',
         'content': prompt,
     }
 
@@ -91,21 +104,18 @@ def gaslight(args) -> None:
 
     try:
         message_list = []
-        message_list.append(input_system_prompt())
-        print('-' * 80)
+        message_list.append(set_prompt('system'))
+        print('-' * 100)
 
         while True:
-            message_list.append(input_user_prompt())
-            print('\n')
-
-            assistant_response = input_assistant_response()
-            if assistant_response == '':
-                assistant_response = generate_response(message_list, args.apikey, args.model)
-            message_list.append(assistant_response)
-            print('\n')
+            message_list.append(set_prompt('user'))
+            print()
+            message_list.append(get_assistant_response(message_list, args))
+            print()
 
     except EOFError:
-        print(f'message_list:\n{message_list}', file=sys.stderr)
+        print(f'message_list:\n{json.dumps(message_list, indent=2)}', file=sys.stderr)
+        sys.exit(2)
 
     except KeyboardInterrupt:
         print('\nGoodbye.', file=sys.stderr)
@@ -131,26 +141,24 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def print_banner() -> None:
+def set_prompt(prompt_type: str) -> str:
     """
-    Print the program banner.
+    Set an incoming prompt.
+
+    Args:
+        prompt_type: The type of prompt to set.
+
+    Returns:
+        The incoming prompt.
     """
 
-    print(
-        (
-            "\n"
-            " ░▒▓██████▓▒░ ░▒▓██████▓▒░ ░▒▓███████▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░ \n"
-            "░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
-            "░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
-            "░▒▓█▓▒▒▓███▓▒░▒▓████████▓▒░░▒▓██████▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒▒▓███▓▒░▒▓████████▓▒░  ░▒▓█▓▒░     \n"
-            "░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
-            "░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n"
-            " ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░░▒▓████████▓▒░▒▓█▓▒░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░  ░▒▓█▓▒░     \n" 
-            "\n"
-            "Attempt to gaslight OpenAI's chat models by spoofing its output.\n"
-            "Press Ctrl+C to exit, or Ctrl+D to print the message list.\n"
-        )
-    )
+    prompt = input(f'{prompt_type.capitalize()} prompt: ')
+
+    return {
+        'role': prompt_type,
+        'content': prompt,
+    }
+
 
 def main() -> None:
     """
@@ -159,7 +167,7 @@ def main() -> None:
 
     args = parse_args()
 
-    print_banner()
+    display_startup_banner(args.model)
     gaslight(args)
 
 
