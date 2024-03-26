@@ -5,3 +5,5 @@
 ```sh
 ./gaslight.py -a [openai_api_key] -m [chat_model]
 ```
+## Demo
+![screenshot](gaslight_demo.png)
